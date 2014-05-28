@@ -1,0 +1,6 @@
+{:moodle-db {:subprotocol "postgresql"
+             :subname "//kirk-direct/moodletestX_vlacs_org"
+             :user "user"
+             :password "password"}
+ :comps-path "~/rollout-files/comps"
+ :content-path "~/rollout-files/ContentExport.csv"}
