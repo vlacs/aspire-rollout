@@ -35,14 +35,10 @@
                  (rest)))
     (throw (Exception. (str "Comps folder missing: " dir-path)))))
 
-(defn csv-row->content [columns row]
-  (zipmap (map keyword columns) row))
-
 (defn get-content [path]
   (if (.isFile (File. path))
     (let [content (csv/parse-csv (slurp path))]
-      (map (partial csv-row->content (first content))
-           (rest content)))
+      (map #(zipmap (map keyword (first content)) %) (rest content)))
     (throw (Exception. (str "Content file missing: " path)))))
 
 (declare get-pods
