@@ -26,7 +26,7 @@
     (xml->competency x)))
 
 (defn get-comps [dir-path]
-  (if (.isDir (File. dir-path))
+  (if (.isDirectory (File. dir-path))
     (reduce #(concat %1 (file->comps %2))
             []
             (->> dir-path
@@ -54,7 +54,7 @@
   (let [config (get-config)
         moodle-db (:moodle-db config)
         aspire-db (:aspire-db config)
-        comps (get-comps (:comps-path config))
+        comps (get-comps (:comps-dir config))
         content (get-content (:content-path config))
         pods (get-pods moodle-db)]
     (update-pod-compids! moodle-db pods comps)

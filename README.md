@@ -13,8 +13,8 @@ Create a rollout-conf.edn file (an example file is included at rollout-conf-dist
              :subname "//kirk-direct/moodletestX_vlacs_org"
              :user "user"
              :password "password"}
- :comps-path "~/rollout-files/comps"
- :content-path "~/rollout-files/ContentExport.csv"}
+ :comps-dir "/tmp/rollout-files/comps"
+ :content-path "/tmp/rollout-files/ContentExport.csv"}
 ```
 
 ## License
