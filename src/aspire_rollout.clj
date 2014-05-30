@@ -14,7 +14,7 @@
 
 (defn xml->competency [comp-node]
   (let [attrs (:attrs comp-node)]
-    {:comp/id-sk (Integer. (:num attrs))
+    {:comp/id-sk (:num attrs)
      :comp/name (:label attrs)
      :comp/description (s/trim (first (:content comp-node)))
      :comp/version "LTP"
@@ -41,12 +41,57 @@
       (map #(zipmap (map keyword (first content)) %) (rest content)))
     (throw (Exception. (str "Content file missing: " path)))))
 
-(declare get-pods
-         update-pod-compids!
-         load-new-pods!
-         load-comps!
+(defn comps->comp-ids [comps]
+  (into #{} (for [c comps] (:comp/id-sk c))))
+
+(defn update-pod-compid [comp-ids dummy-compid pod]
+  (assoc pod :comp_id_sk (if (contains? comp-ids (:id_sk pod))
+                           (:id_sk pod)
+                           dummy-compid)))
+
+(defn get-pods-with-compids [moodle-db comps dummy-compid]
+  (let [comp-ids (comps->comp-ids comps)]
+    (map (partial update-pod-compid comp-ids dummy-compid)
+         (sql/query moodle-db ["select * from mdl_asmt_pod"]))))
+
+(defn update-moodle-pods! [moodle-db pods]
+  (doseq [pod pods]
+    (sql/update! :asmt_pod {:comp_id_sk (:comp_id_sk pod)} ["id = ?" (:id pod)])))
+
+;; competencyName or lmName?
+;; TODO: make sure this is correct:
+(defn content->pod [moodle-db
+                    origin
+                    pod-type
+                    {:keys [id code] name :lmName description :competencyName}]
+  (let [code (clojure.edn/read-string code)]
+    (if (number? code)
+      (let [query [(str "select mcv.id "
+                        "from mdl_master_course mc "
+                        "join mdl_master_course_version mcv on mcv.master_course_idstr = mc.master_course_idstr "
+                        "where mcv.version = 'LTP' "
+                        "and mc.name ilike ("
+                        "  select mc2.name"
+                        "  from mdl_asmt_pod ap"
+                        "  join mdl_master_course_version mcv2 on ap.master_course_version_id = mcv2.id"
+                        "  join mdl_master_course mc2 on mcv2.master_course_idstr = mc2.master_course_idstr"
+                        "  where ap.id = ?"
+                        ") || '%LTP'") code]]
+        {:id_sk id
+         :id_sk_origin origin
+         :comp_id_sk code
+         :asmt_pod_type_id pod-type
+         :name name
+         :description description
+         :master_course_version_id (:id (first (sql/query moodle-db query)))})
+      nil)))
+
+(defn load-new-pods! [moodle-db pods]
+    (sql/insert! moodle-db pods))
+
+;; TODO:
+(declare load-comps!
          load-perf-asmts!
-         content->pods
          content->perf-asmts
          pods->perf-asmts)
 
@@ -56,9 +101,14 @@
         aspire-db (:aspire-db config)
         comps (get-comps (:comps-dir config))
         content (get-content (:content-path config))
-        pods (get-pods moodle-db)]
-    (update-pod-compids! moodle-db pods comps)
-    (load-new-pods! moodle-db (content->pods content))
+        pods (get-pods-with-compids moodle-db comps (:dummy-compid config))]
+    (update-moodle-pods! moodle-db pods)
+    (load-new-pods! moodle-db (->> content
+                                   (map (partial content->pod
+                                                 moodle-db
+                                                 (:se-origin config)
+                                                 (:se-pod-type config)))
+                                   (remove nil?)))  ;; FIXME: WE SHOULDN'T HAVE TO DO THIS WITH THE REAL DATA
     (load-comps! aspire-db comps)
     (load-perf-asmts! aspire-db (merge (content->perf-asmts content)
                                        (pods->perf-asmts pods)))))
