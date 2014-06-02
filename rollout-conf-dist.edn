@@ -10,6 +10,8 @@
               :comp/status :comp.status/active} ; old pods will be matched up by hand later
  :se-origin "showevidence"
  :se-pod-type 4
+ :se-pod-status "ACTIVE"
  :datomic-uri "datomic:mem://rollout-test"
  :pod-perf-asmt-type "asmt-pod"
+ :se-perf-asmt-type "project"
 }

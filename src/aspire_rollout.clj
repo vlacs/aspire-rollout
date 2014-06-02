@@ -50,6 +50,7 @@
 (defn comps->comp-ids [comps]
   (into #{} (for [c comps] (:comp/id-sk c))))
 
+;; TODO: segment degenerate comps
 (defn update-pod-compid [comp-ids dummy-compid pod]
   (assoc pod :comp_id_sk (if (contains? comp-ids (:id_sk pod))
                            (:id_sk pod)
@@ -62,7 +63,7 @@
 
 (defn update-moodle-pods! [moodle-db pods]
   (doseq [pod pods]
-    (sql/update! :asmt_pod {:comp_id_sk (:comp_id_sk pod)} ["id = ?" (:id pod)])))
+    (sql/update! moodle-db :mdl_asmt_pod {:comp_id_sk (:comp_id_sk pod)} ["id = ?" (:id pod)])))
 
 ;; competencyName or lmName?
 ;; TODO: make sure this is correct:
@@ -92,8 +93,13 @@
          :master_course_version_id (:id (first (sql/query moodle-db query)))})
       nil)))
 
-(defn load-new-pods! [moodle-db pods]
-    (sql/insert! moodle-db pods))
+(defn load-new-pods! [moodle-db status pods]
+  (let [now (quot (System/currentTimeMillis) 1000)]
+    (doseq [pod pods]
+      (sql/insert! moodle-db :mdl_asmt_pod (merge {:timecreated now
+                                                   :timemodified now
+                                                   :status_idstr status}
+                                                  pod)))))
 
 (defn load-navigator-entities! [db-conn type entities]
   (doseq [ent entities]
@@ -123,6 +129,7 @@
         pods (get-pods-with-compids (:moodle-db system) comps (:comp/id-sk (:dummy-comp system)))]
     (update-moodle-pods! (:moodle-db system) pods)
     (load-new-pods! (:moodle-db system)
+                    (:se-pod-status system)
                     (->> content (map (partial content->pod
                                                (:moodle-db system)
                                                (:se-origin system)
