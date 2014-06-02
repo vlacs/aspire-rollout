@@ -3,7 +3,9 @@
             [clojure.string :as s]
             [clojure-csv.core :as csv]
             [clojure.java.jdbc :as sql]
-            [clojure.edn])
+            [clojure.edn]
+            [datomic.api :as d]
+            [navigator])
   (:import (java.io File)))
 
 (defn get-config []
@@ -12,13 +14,17 @@
       (clojure.edn/read-string (slurp path))
       (throw (Exception. (str "Config file missing: " path))))))
 
+(defn get-db-conn [{:keys [datomic-uri] :as system}]
+  (assoc system :db-conn (d/connect datomic-uri)))
+
+;; TODO: version probably isn't correct
 (defn xml->competency [comp-node]
   (let [attrs (:attrs comp-node)]
     {:comp/id-sk (:num attrs)
      :comp/name (:label attrs)
      :comp/description (s/trim (first (:content comp-node)))
      :comp/version "LTP"
-     :comp/status :active}))
+     :comp/status :comp.status/active}))
 
 (defn file->comps [file]
   (for [x (xml-seq (xml/parse file))
@@ -89,33 +95,44 @@
 (defn load-new-pods! [moodle-db pods]
     (sql/insert! moodle-db pods))
 
-;; TODO:
-(declare load-comps!
-         load-perf-asmts!
-         content->perf-asmts
-         pods->perf-asmts)
+(defn load-navigator-entities! [db-conn type entities]
+  (doseq [ent entities]
+    (navigator/tx-entity! db-conn type ent)))
+
+(defn pod->perf-asmt [type {:keys [id_sk id_sk_origin name comp_id_sk]}]
+  {:perf-asmt/id-sk id_sk
+   :perf-asmt/id-sk-origin (keyword id_sk_origin)
+   :perf-asmt/name name
+   :perf-asmt/version "figgitybloop"  ; TODO: construct a version
+   :perf-asmt/type type
+   :perf-asmt/comps [[:comp/id-sk comp_id_sk]]})
+
+(defn content->perf-asmt [origin type {:keys [id code] name :lmName}]
+  {:perf-asmt/id-sk id
+   :perf-asmt/id-sk-origin origin
+   :perf-asmt/name name
+   :perf-asmt/version "figgitybloop"  ; TODO: construct a version
+   :perf-asmt/type type
+   :perf-asmt/comps [[:comp/id-sk code]]})
 
 (defn -main [& args]
-  (let [config (get-config)
-        moodle-db (:moodle-db config)
-        aspire-db (:aspire-db config)
-        comps (get-comps (:comps-dir config))
-        content (get-content (:content-path config))
-        pods (get-pods-with-compids moodle-db comps (:dummy-compid config))]
-    (update-moodle-pods! moodle-db pods)
-    (load-new-pods! moodle-db (->> content
-                                   (map (partial content->pod
-                                                 moodle-db
-                                                 (:se-origin config)
-                                                 (:se-pod-type config)))
-                                   (remove nil?)))  ;; FIXME: WE SHOULDN'T HAVE TO DO THIS WITH THE REAL DATA
-    (load-comps! aspire-db comps)
-    (load-perf-asmts! aspire-db (merge (content->perf-asmts content)
-                                       (pods->perf-asmts pods)))))
-
-(comment
-
-  (def pods  (sql/query aspire-rollout/db-spec ["select * from mdl_asmt_pod"]))
-  (def comps (aspire-rollout/dir->comps "/home/dzaharee/rollout-files/"))
-
-  )
+  (let [system (get-config)
+        system (get-db-conn system)
+        comps (get-comps (:comps-dir system))
+        content (get-content (:content-path system))
+        pods (get-pods-with-compids (:moodle-db system) comps (:comp/id-sk (:dummy-comp system)))]
+    (update-moodle-pods! (:moodle-db system) pods)
+    (load-new-pods! (:moodle-db system)
+                    (->> content (map (partial content->pod
+                                               (:moodle-db system)
+                                               (:se-origin system)
+                                               (:se-pod-type system)))
+                         (remove nil?)))  ;; FIXME: WE SHOULDN'T HAVE TO DO THIS WITH THE REAL DATA
+    (load-navigator-entities! (:db-conn system) :comp (concat [(:dummy-comp system)] comps))
+    (load-navigator-entities! (:db-conn system) :perf-asmt (concat (map (partial content->perf-asmt
+                                                                                (keyword (:se-origin system))
+                                                                                (:se-perf-asmt-type system))
+                                                                       content)
+                                                                  (map (partial pod->perf-asmt
+                                                                                (:pod-perf-asmt-type system))
+                                                                       pods)))))

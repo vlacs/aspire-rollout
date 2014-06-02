@@ -4,7 +4,12 @@
              :password "password"}
  :comps-dir "/tmp/rollout-files/comps/"
  :content-path "/tmp/rollout-files/ContentExport.csv"
- :dummy-compid "-1" ; old pods will be matched up by hand later
+ :dummy-comp {:comp/id-sk "-1"
+              :comp/name "fixme"
+              :comp/version "fixme"
+              :comp/status :comp.status/active} ; old pods will be matched up by hand later
  :se-origin "showevidence"
  :se-pod-type 4
+ :datomic-uri "datomic:mem://rollout-test"
+ :pod-perf-asmt-type "asmt-pod"
 }
