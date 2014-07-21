@@ -7,7 +7,7 @@
                  [org.clojure/java.jdbc "0.3.2"]
                  [org.postgresql/postgresql "9.3-1101-jdbc4"]
                  ^{:voom {:repo "https://github.com/vlacs/navigator" :branch "master"}}
-                 [org.vlacs/navigator "0.1.2-20140604_174521-g4a146b4"]]
+                 [org.vlacs/navigator "0.1.2-20140610_174531-g9089f2d"]]
   :pedantic? :warn ; :abort
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/tools.namespace "0.2.4"]

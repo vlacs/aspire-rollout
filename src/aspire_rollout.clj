@@ -141,6 +141,7 @@
 
 (defn pod->perf-asmt [type {:keys [id_sk id_sk_origin name comp_id_sk]}]
   {:perf-asmt/id-sk id_sk
+   :perf-asmt/id-sk-with-origin (str id_sk id_sk_origin)
    :perf-asmt/id-sk-origin (keyword id_sk_origin)
    :perf-asmt/name name
    :perf-asmt/version "figgitybloop"  ; TODO: construct a version
@@ -148,8 +149,8 @@
    :perf-asmt/comps [[:comp/id-sk comp_id_sk]]})
 
 (defn get-perf-asmts [system content pods]
-  (concat (map (partial content->perf-asmt (keyword (:se-origin system)) (:se-perf-asmt-type system)) content)
-          (map (partial pod->perf-asmt (:pod-perf-asmt-type system)) pods)))
+  (into #{} (concat (map (partial content->perf-asmt (keyword (:se-origin system)) (:se-perf-asmt-type system)) content)
+                    (map (partial pod->perf-asmt (:pod-perf-asmt-type system)) pods))))
 
 (defn load-perf-asmts! [system perf-asmts]
   (load-navigator-entities! (:db-conn system) :perf-asmt perf-asmts))
@@ -167,14 +168,18 @@
           {} map))
 
 ;; TODO: tags probably need more than just this
-(defn get-tag [[tag-name comps]]
-  {:comp-tag/name tag-name
-   :comp-tag/child-comps (map (partial vector :comp/id-sk) comps)})
+(defn get-tag [perf-asmts [tag-name comps]]
+  (let [comps (map str comps)]
+    {:comp-tag/name tag-name
+     :comp-tag/child-comps (map (partial vector :comp/id-sk) comps)
+     :comp-tag/child-perf-asmts (map #(vector :perf-asmt/id-sk-with-origin (:perf-asmt/id-sk-with-origin %))
+                                     (filter (fn [p] (some #(= (second (first (:perf-asmt/comps p))) %) comps))
+                                             perf-asmts))}))
 
-(defn get-tags [comp-master-master-courses]
+(defn get-tags [comp-master-master-courses perf-asmts]
   (->> comp-master-master-courses
        (collision-aware-map-invert)
-       (map get-tag)))
+       (map (partial get-tag perf-asmts))))
 
 (defn -main [& args]
   (let [system (get-db-conn (get-config))
@@ -196,10 +201,10 @@
   (def system (get-db-conn (get-config))) ; (reset) does this one for you
   (def comps (get-comps (:comps-dir system)))
   (def comp-master-master-courses (get-comp-master-master-courses (:moodle-db system) comps))
-  (def tags (get-tags comp-master-master-courses))
   (def content (get-content (:content-path system) comp-master-master-courses))
   (def pods (get-pods-with-compids (:moodle-db system) comps (:comp/id-sk (:dummy-comp system))))
   (def new-pods (get-new-pods system content))
   (def perf-asmts (get-perf-asmts system content pods))
+  (def tags (get-tags comp-master-master-courses perf-asmts))
 
   )
