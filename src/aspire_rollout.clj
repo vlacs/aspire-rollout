@@ -5,7 +5,9 @@
             [clojure.java.jdbc :as sql]
             [clojure.edn]
             [datomic.api :as d]
-            [navigator])
+            [navigator]
+            [org.httpkit.client :as http]
+            [clojure.data.json :as json])
   (:import (java.io File)))
 
 (defn get-config []
@@ -17,14 +19,22 @@
 (defn get-db-conn [{:keys [datomic-uri] :as system}]
   (assoc system :db-conn (d/connect datomic-uri)))
 
+(defn call-galleon!
+  [base-url token type id-sk id-sk-origin payload]
+  (http/post (apply str (interpose "/" [base-url (name id-sk-origin) (name type) id-sk]))
+             {:headers {"Accept" "application/json"
+                        "Accept-Charset" "utf-8"
+                        "Authorization" (str "Token " token)}
+              :body (json/write-str payload)}))
+
 ;; TODO: version?
 (defn xml->competency [comp-node]
   (let [attrs (:attrs comp-node)]
-    {:comp/id-sk (:num attrs)
-     :comp/name (:label attrs)
-     :comp/description (s/trim (first (:content comp-node)))
-     :comp/version "LTP"
-     :comp/status :comp.status/active}))
+    {:id-sk (:num attrs)
+     :name (:label attrs)
+     :description (s/trim (first (:content comp-node)))
+     :version "LTP"
+     :status :comp.status/active}))
 
 (defn file->comps [file]
   (for [x (xml-seq (xml/parse file))
@@ -129,7 +139,14 @@
     (navigator/tx-entity! db-conn type ent)))
 
 (defn load-comps! [system comps]
-  (load-navigator-entities! (:db-conn system) :comp (concat [(:dummy-comp system)] comps)))
+  (map #(call-galleon! (:galleon-in-url system)
+                       (:galleon-token system)
+                       :comp
+                       (:id-sk %)
+                       :blarg
+                       %)
+       comps)
+  #_(load-navigator-entities! (:db-conn system) :comp (concat [(:dummy-comp system)] comps)))
 
 (defn content->perf-asmt [origin type {:keys [id code version] name :lmName}]
   {:perf-asmt/id-sk id
@@ -190,10 +207,15 @@
         pods (get-pods-with-compids (:moodle-db system) comps (:comp/id-sk (:dummy-comp system)))
         new-pods (get-new-pods system content)
         perf-asmts (get-perf-asmts system content pods)]
+    #_
     (update-moodle-pods! (:moodle-db system) pods)
+    #_
     (load-se-pod-type! (:moodle-db system) (:se-pod-type system))
+    #_
     (load-new-pods! system new-pods)
+    #_
     (load-comps! system comps)
+    #_
     (load-perf-asmts! system perf-asmts)))
 
 (comment
