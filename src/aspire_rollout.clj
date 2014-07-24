@@ -145,8 +145,7 @@
                        (:id-sk %)
                        :blarg
                        %)
-       comps)
-  #_(load-navigator-entities! (:db-conn system) :comp (concat [(:dummy-comp system)] comps)))
+       comps))
 
 (defn content->perf-asmt [origin type {:keys [id code version] name :lmName}]
   {:perf-asmt/id-sk id
@@ -222,6 +221,7 @@
 
   (def system (get-db-conn (get-config))) ; (reset) does this one for you
   (def comps (get-comps (:comps-dir system)))
+  (load-comps! system comps)
   (def comp-master-master-courses (get-comp-master-master-courses (:moodle-db system) comps))
   (def content (get-content (:content-path system) comp-master-master-courses))
   (def pods (get-pods-with-compids (:moodle-db system) comps (:comp/id-sk (:dummy-comp system))))
